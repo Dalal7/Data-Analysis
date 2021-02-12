@@ -1,0 +1,342 @@
+## Project Summary
+In this project, I will use R language to analyze the sales data for Big Mart Outlets. The data set has taken from  [https://datahack.analyticsvidhya.com/contest/practice-problem-big-mart-sales-iii/#ProblemStatement](Big Mart Sales Prediction). The project goes through 5 phases, Data Exploration, Data Visualization, Data Cleaning, Data manipulation, and Predictive modeling using Machine Learning  
+
+### Data Exploration
+```{r}
+# Loading Datasets
+train <- read.csv("C:\\data\\train_v9rqX0R.csv")
+test <- read.csv("C:\\data\\test_AbJTz2l.csv")
+```
+
+```{r}
+# Check the sizes
+dim(train)
+dim(test)
+```
+```{r}
+# Check the column names and types
+str(train)
+```
+
+```{r}
+# Convert the categorical columns from character to factor 
+train$Item_Fat_Content <- as.factor(train$Item_Fat_Content) 
+train$Outlet_Size <- as.factor(train$Outlet_Size) 
+train$Outlet_Location_Type <- as.factor(train$Outlet_Location_Type) 
+train$Outlet_Type <- as.factor(train$Outlet_Type) 
+
+levels(train$Item_Fat_Content)
+levels(train$Outlet_Size)
+levels(train$Outlet_Location_Type)
+levels(train$Outlet_Type)
+```
+```{r}
+# Check for missing values
+table(is.na(train))
+```
+
+```{r}
+# Check the variables which has those missing values
+colSums(is.na(train))
+```
+```{r}
+summary(train)
+```
+Here are some quick inferences drawn from variables in train data set:
+
+1. Item_Fat_Content has mis-matched factor levels.
+2. Minimum value of item_visibility is 0. Practically, this is not possible. If an item occupies shelf space in a grocery store, it ought to have some visibility. We’ll treat all 0’s as missing values.
+3. Item_Weight has 1463 missing values (already explained above).
+4. Outlet_Size has a unmatched factor levels.
+
+### Data Visualization 
+```{r}
+ggplot(train, aes(x= Item_Visibility, y = Item_Outlet_Sales)) + geom_point(size = 2.5, color="navy") + xlab("Item Visibility") + ylab("Item Outlet Sales") + ggtitle("Item Visibility vs Item Outlet Sales")
+```
+We can see that majority of sales has been obtained from products having visibility less than 0.2. This suggests that item_visibility < 2 must be an important factor in determining sales. Let’s plot few more interesting graphs and explore such hidden stories.
+
+```{r}
+ggplot(train, aes(Outlet_Identifier, Item_Outlet_Sales)) + geom_bar(stat = "identity", color = "purple") +theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black"))  + ggtitle("Outlets vs Total Sales") + theme_bw()
+```
+Here, we infer that OUT027 has contributed to majority of sales followed by OUT35. OUT10 and OUT19 have probably the least footfall, thereby contributing to the least outlet sales.
+
+```{r}
+ggplot(train, aes(Item_Type, Item_Outlet_Sales)) + geom_bar( stat = "identity") +theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "navy")) + xlab("Item Type") + ylab("Item Outlet Sales")+ggtitle("Item Type vs Sales")
+```
+From this graph, we can infer that Fruits and Vegetables contribute to the highest amount of outlet sales followed by snack foods and household products.
+
+### Data Cleaning
+```{r}
+#Combine the 2 datasets (Train & Test)
+dim(train)
+dim(test)
+```
+```{r}
+test$Item_Outlet_Sales <-  1
+combi <- rbind(train, test)
+```
+
+Impute missing value by median. I’m using median because it is known to be highly robust to outliers. Moreover, for this problem, our evaluation metric is RMSE which is also highly affected by outliers. Hence, median is better in this case.
+```{r}
+combi$Item_Weight[is.na(combi$Item_Weight)] <- median(combi$Item_Weight, na.rm = TRUE)
+table(is.na(combi$Item_Weight))
+```
+Let’s take up Item_Visibility. In the graph above, we saw item visibility has zero value also, which is practically not feasible. Hence, we’ll consider it as a missing value and once again make the imputation using median
+```{r}
+combi$Item_Visibility <- ifelse(combi$Item_Visibility == 0,
+                           median(combi$Item_Visibility), combi$Item_Visibility)
+```
+
+```{r}
+library(ggplot2)
+ggplot(combi, aes(x= Item_Visibility, y = Item_Outlet_Sales)) + geom_point(size = 2.5, color="navy") + xlab("Item Visibility") + ylab("Item Outlet Sales") + ggtitle("Item Visibility vs Item Outlet Sales")
+```
+Handling the mismatched levels in variables   
+```{r}
+levels(combi$Outlet_Size)[1] <- "Other"
+library(plyr)
+combi$Item_Fat_Content <- revalue(combi$Item_Fat_Content,
+c("LF" = "Low Fat", "reg" = "Regular"))
+combi$Item_Fat_Content <- revalue(combi$Item_Fat_Content, c("low fat" = "Low Fat"))
+table(combi$Item_Fat_Content)
+```
+```{r}
+levels(combi$Item_Fat_Content)
+levels(combi$Outlet_Size)
+```
+### Data Manipulation  
+
+```{r}
+# Count of Outlet Identifiers
+library(dplyr)
+a <- combi%>%
+            group_by(Outlet_Identifier)%>%
+            tally()
+head(a)
+```
+```{r}
+names(a)[2] <- "Outlet_Count"
+combi <- full_join(a, combi, by = "Outlet_Identifier")
+```
+
+```{r}
+head(combi)
+```
+
+```{r}
+# Count of Item Identifiers
+b <- combi%>%
+          group_by(Item_Identifier)%>%
+          tally()
+
+names(b)[2] <- "Item_Count"
+```
+
+```{r}
+head(b)
+```
+
+```{r}
+combi <- merge(b, combi, by = "Item_Identifier")
+head(combi)
+```
+```{r}
+c <- combi%>%
+           select(Outlet_Establishment_Year)%>% 
+           mutate(Outlet_Year = 2013 - combi$Outlet_Establishment_Year)
+
+c = c %>% distinct(Outlet_Establishment_Year,Outlet_Year)
+head(c)
+```
+
+```{r}
+combi <- merge(c, combi, by = "Outlet_Establishment_Year")
+head(combi)
+```
+
+```{r}
+q <- substr(combi$Item_Identifier,1,2)
+q <- gsub("FD","Food",q)
+q <- gsub("DR","Drinks",q)
+q <- gsub("NC","Non-Consumable",q)
+table(q)
+```
+```{r}
+combi$Item_Type_New <- q
+```
+
+
+```{r}
+# Label Encoding
+combi$Item_Fat_Content <- ifelse(combi$Item_Fat_Content == "Regular",1,0)
+```
+
+```{r}
+
+# Convert the type of the new variable to factor
+combi$Item_Type_New <- as.factor(combi$Item_Type_New)
+str(combi)
+```
+
+```{r}
+# One Hot Encoding
+library(dummies)
+combi <- dummy.data.frame(combi, names = c('Outlet_Size','Outlet_Location_Type','Outlet_Type', 'Item_Type_New'),  sep='_')
+str(combi)
+```
+
+### Predictive Modeling using Machine Learning
+```{r}
+# drop the columns which have either been converted using other variables or are identifier variables
+combi <- select(combi, -c(Item_Identifier, Outlet_Identifier, Item_Fat_Content,                                Outlet_Establishment_Year,Item_Type))
+str(combi)
+```
+```{r}
+# devide the dataset into train and test
+new_train <- combi[1:nrow(train),]
+new_test <- combi[-(1:nrow(train)),]
+```
+
+```{r}
+# Build our Linear Regression model
+linear_model <- lm(Item_Outlet_Sales ~ ., data = new_train)
+summary(linear_model)
+```
+Adjusted R² measures the goodness of fit of a regression model. Higher the R², better is the model. Our R² = 0.2319. It means we really did something drastically wrong.
+
+In our case, I could find our new variables aren’t helping much i.e. Item count, Outlet Count and Item_Type_New. Neither of these variables are significant. Significant variables are denoted by ‘*’ sign.
+
+As we know, correlated predictor variables brings down the model accuracy. Let’s find out the amount of correlation present in our predictor variables. This can be simply calculated using:
+
+```{r}
+cor(new_train)
+```
+
+```{r}
+cor(new_train$Outlet_Count, new_train$`Outlet_Type_Grocery Store`)
+```
+Let’s try to create a more robust regression mode
+```{r}
+#load data
+train <- read.csv("C:\\data\\train_v9rqX0R.csv")
+test <- read.csv("C:\\data\\test_AbJTz2l.csv")
+```
+
+```{r}
+#create a new variable in test file
+test$Item_Outlet_Sales <- 1
+
+#combine train and test data
+combi <- rbind(train, test)
+```
+
+```{r}
+#impute missing value in Item_Weight
+combi$Item_Weight[is.na(combi$Item_Weight)] <- median(combi$Item_Weight, na.rm = TRUE)
+```
+
+```{r}
+#impute 0 in item_visibility
+combi$Item_Visibility <- ifelse(combi$Item_Visibility == 0, median(combi$Item_Visibility), combi$Item_Visibility)
+```
+
+```{r}
+combi$Item_Fat_Content <- as.factor(combi$Item_Fat_Content) 
+combi$Outlet_Size <- as.factor(combi$Outlet_Size) 
+combi$Outlet_Location_Type <- as.factor(combi$Outlet_Location_Type) 
+combi$Outlet_Type <- as.factor(combi$Outlet_Type) 
+
+#rename level in Outlet_Size
+levels(combi$Outlet_Size)[1] <- "Other"
+
+#rename levels of Item_Fat_Content
+library(plyr)
+combi$Item_Fat_Content <- revalue(combi$Item_Fat_Content,c("LF" = "Low Fat", "reg" =                                   "Regular"))
+combi$Item_Fat_Content <- revalue(combi$Item_Fat_Content, c("low fat" = "Low Fat"))
+```
+
+
+```{r}
+levels(combi$Item_Fat_Content)
+levels(combi$Outlet_Size)
+
+```
+
+```{r}
+#create a new column 2013 - Year
+combi$Year <- 2013 - combi$Outlet_Establishment_Year
+```
+
+```{r}
+#drop variables not required in modeling
+library(dplyr)
+combi <- select(combi, -c(Item_Identifier, Outlet_Identifier, Outlet_Establishment_Year))
+```
+
+```{r}
+#divide data set
+new_train <- combi[1:nrow(train),]
+new_test <- combi[-(1:nrow(train)),]
+```
+
+```{r}
+#linear regression
+linear_model <- lm(Item_Outlet_Sales ~ ., data = new_train)
+summary(linear_model)
+```
+Now we have got R² = 0.5623 which means it improved than before.
+
+Let’s check out regression plot to find out more ways to improve this model.
+```{r}
+par(mfrow=c(2,2))
+plot(linear_model)
+```
+The shape of the Residuals graph shows that the model is suffering from heteroskedasticity (unequal variance in error terms), which can be solved by taking the log of response variable:
+
+```{r}
+linear_model <- lm(log(Item_Outlet_Sales) ~ ., data = new_train)
+summary(linear_model)
+```
+We have got an improved model with R² = 0.72
+
+```{r}
+# Check our RMSE
+library(Metrics)
+rmse(new_train$Item_Outlet_Sales, exp(linear_model$fitted.values))
+```
+
+```{r}
+# Building a decision tree
+
+# Loading required libraries
+library(rpart)
+library(e1071)
+library(rpart.plot)
+library(caret)
+
+# Setting the tree control parameters
+fitControl <- trainControl(method = "cv", number = 5)
+cartGrid <- expand.grid(.cp=(1:50)*0.01)
+
+tree_model <- train(Item_Outlet_Sales ~ ., data = new_train, method = "rpart", trControl = fitControl, tuneGrid = cartGrid)
+print(tree_model)
+```
+
+```{r}
+main_tree <- rpart(Item_Outlet_Sales ~ ., data = new_train, control = rpart.control(cp=0.01))
+prp(main_tree)
+```
+
+```{r}
+pre_score <- predict(main_tree, type = "vector")
+rmse(new_train$Item_Outlet_Sales, pre_score)
+```
+
+```{r}
+# Predict the test data using the decision tree
+main_predict <- predict(main_tree, newdata = new_test, type = "vector")
+sub_file <- data.frame(Item_Identifier = test$Item_Identifier, Outlet_Identifier = test$Outlet_Identifier, Item_Outlet_Sales = main_predict)
+write.csv(sub_file, 'Decision_tree_sales.csv')
+```
+
+
