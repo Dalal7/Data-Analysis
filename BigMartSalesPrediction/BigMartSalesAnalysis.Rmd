@@ -1,5 +1,5 @@
 ## Project Summary
-In this project, I will use R language to analyze the sales data for Big Mart Outlets. The data set has taken from  [https://datahack.analyticsvidhya.com/contest/practice-problem-big-mart-sales-iii/#ProblemStatement](Big Mart Sales Prediction). The project goes through 5 phases, Data Exploration, Data Visualization, Data Cleaning, Data manipulation, and Predictive modeling using Machine Learning  
+In this project, I will use R language to analyze the sales data for Big Mart Outlets. The data set has taken from  [Big Mart Sales Prediction](https://datahack.analyticsvidhya.com/contest/practice-problem-big-mart-sales-iii/#ProblemStatement). The project goes through 5 phases, Data Exploration, Data Visualization, Data Cleaning, Data manipulation, and Predictive modeling using Machine Learning  
 
 ### Data Exploration
 ```{r}
@@ -51,6 +51,7 @@ Here are some quick inferences drawn from variables in train data set:
 
 ### Data Visualization 
 ```{r}
+library(ggplot2)
 ggplot(train, aes(x= Item_Visibility, y = Item_Outlet_Sales)) + geom_point(size = 2.5, color="navy") + xlab("Item Visibility") + ylab("Item Outlet Sales") + ggtitle("Item Visibility vs Item Outlet Sales")
 ```
 We can see that majority of sales has been obtained from products having visibility less than 0.2. This suggests that item_visibility < 2 must be an important factor in determining sales. Let’s plot few more interesting graphs and explore such hidden stories.
